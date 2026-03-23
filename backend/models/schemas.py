@@ -87,3 +87,46 @@ class WhatIfResponse(BaseModel):
     modified_features: dict[str, bool]
     modified_scene_type: dict
     modified_num_characters: int
+
+
+class Creator(BaseModel):
+    creator_id: str
+    name: str = ""
+    skills: list[str] = []
+    tools_used: list[str] = []
+    engagement_rate: str = "0%"
+    experience_level: str = "Beginner"
+    price_range: str = "Medium"
+
+class ScriptRequirements(BaseModel):
+    needs_vfx: int = 0
+    needs_stunts: int = 0
+    needs_night_shoot: int = 0
+    needs_crowd: int = 0
+    complexity_level: str = "medium"
+    budget_level: str = "medium"
+
+class MatchRequest(BaseModel):
+    script_requirements: ScriptRequirements
+    creators_dataset: Optional[list[Creator]] = None
+
+class Explanation(BaseModel):
+    why_they_fit: str
+    trade_offs: str
+
+class Breakdown(BaseModel):
+    skill: float
+    cost: float
+    experience: float
+    engagement: float
+
+class CreatorMatch(BaseModel):
+    creator_id: str
+    creator_name: str
+    score: float
+    breakdown: Breakdown
+    explanation: Explanation
+    raw_data: dict
+
+class MatchResponse(BaseModel):
+    matches: list[CreatorMatch]

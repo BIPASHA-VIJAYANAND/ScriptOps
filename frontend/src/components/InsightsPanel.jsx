@@ -51,11 +51,13 @@ function EmptyState({ tab, selectedScene }) {
 }
 
 export default function InsightsPanel({ analysis, selectedScene }) {
-  const [tab, setTab] = useState('overall'); // 'overall', 'scene', 'chat'
+  const [tab, setTab] = useState('overall'); // 'overall', 'scene', 'chat', 'crew'
   
   // Analytics State
   const [overallData, setOverallData] = useState(null);
   const [sceneData, setSceneData] = useState({});   // keyed by scene_number
+  const [crewData, setCrewData] = useState(null);
+  const [crewLoading, setCrewLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const prevScene = useRef(null);
 
@@ -117,9 +119,45 @@ export default function InsightsPanel({ analysis, selectedScene }) {
     }
   };
 
+  const fetchCrew = async () => {
+    setCrewLoading(true);
+    try {
+      // Derive requirements from current scene or overall
+      let reqs = {
+        needs_vfx: 0, needs_stunts: 0, needs_night_shoot: 0, needs_crowd: 0,
+        complexity_level: "medium", budget_level: "medium"
+      };
+      
+      const currentSceneData = selectedScene ? analysis?.scenes.find(s => s.scene_number === selectedScene) : null;
+      if (currentSceneData) {
+        reqs.needs_vfx = currentSceneData.features.vfx ? 1 : 0;
+        reqs.needs_stunts = currentSceneData.features.stunt ? 1 : 0;
+        reqs.needs_night_shoot = currentSceneData.features.night ? 1 : 0;
+        reqs.needs_crowd = currentSceneData.features.crowd ? 1 : 0;
+        reqs.complexity_level = currentSceneData.risk_score > 60 ? 'high' : currentSceneData.risk_score < 30 ? 'low' : 'medium';
+        reqs.budget_level = currentSceneData.budget > 50000 ? 'high' : currentSceneData.budget < 10000 ? 'low' : 'medium';
+      } else if (analysis) {
+        reqs.complexity_level = analysis.avg_risk_score > 60 ? 'high' : 'medium';
+      }
+
+      const res = await fetch(`${API}/match-creators`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script_requirements: reqs })
+      });
+      const data = await res.json();
+      setCrewData(data.matches || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCrewLoading(false);
+    }
+  };
+
   const handleGenerate = () => {
     if (tab === 'overall') fetchOverall();
     else if (tab === 'scene') fetchScene();
+    else if (tab === 'crew') fetchCrew();
   };
 
   const refreshCurrent = () => {
@@ -185,7 +223,8 @@ export default function InsightsPanel({ analysis, selectedScene }) {
         {[
           { id: 'overall', label: '🎬 Overall' },
           { id: 'scene',   label: selectedScene ? `🎯 Scene ${selectedScene}` : '🎯 Scene' },
-          { id: 'chat',    label: '💬 Chat' }
+          { id: 'chat',    label: '💬 Chat' },
+          { id: 'crew',    label: '🎭 Crew' }
         ].map(({ id, label }) => (
           <button
             key={id}
@@ -204,7 +243,7 @@ export default function InsightsPanel({ analysis, selectedScene }) {
         ))}
 
         {/* Refresh button — only when data exists on report tabs */}
-        {hasData && tab !== 'chat' && (
+        {hasData && tab !== 'chat' && tab !== 'crew' && (
           <button
             onClick={refreshCurrent} disabled={loading} title="Re-generate insights"
             style={{
@@ -219,7 +258,7 @@ export default function InsightsPanel({ analysis, selectedScene }) {
       </div>
 
       {/* Scene context strip */}
-      {currentScene && (tab === 'scene' || tab === 'chat') && (
+      {currentScene && (tab === 'scene' || tab === 'chat' || tab === 'crew') && (
         <div style={{
           padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border-accent)',
           fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
@@ -301,8 +340,8 @@ export default function InsightsPanel({ analysis, selectedScene }) {
         )}
 
         {/* EMPTY STATES */}
-        {!loading && missingScene && tab !== 'chat' && <EmptyState tab="scene" selectedScene={null} />}
-        {!loading && needsGenerate && !missingScene && tab !== 'chat' && (
+        {!loading && missingScene && tab !== 'chat' && tab !== 'crew' && <EmptyState tab="scene" selectedScene={null} />}
+        {!loading && needsGenerate && !missingScene && tab !== 'chat' && tab !== 'crew' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '24px 0' }}>
             <EmptyState tab={tab} selectedScene={selectedScene} />
             <button className="simulate-btn" onClick={handleGenerate} style={{ width: 'auto', padding: '12px 32px', fontSize: '0.9rem' }}>
@@ -393,6 +432,65 @@ export default function InsightsPanel({ analysis, selectedScene }) {
                 <DifficultyBadge level={currentData.difficulty} />
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── CREW MATCHING ────────────────────────────────────────────── */}
+        {tab === 'crew' && (
+          <div className="insights-content" style={{ paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {!crewData && !crewLoading && (
+               <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+                 <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎭</div>
+                 <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>Find Your Crew</p>
+                 <p style={{ fontSize: '0.82rem', marginBottom: 16 }}>Match with the perfect creators based on your script's unique demands.</p>
+                 <button className="simulate-btn" onClick={fetchCrew} style={{ width: 'auto', padding: '12px 32px' }}>
+                   ✨ Find Matches
+                 </button>
+               </div>
+            )}
+            {crewLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <ShimmerRow /><ShimmerRow />
+              </div>
+            )}
+            {crewData && crewData.map((match, i) => (
+              <div key={i} style={{
+                background: 'var(--bg-secondary)', borderRadius: 12, padding: 16, border: '1px solid var(--border-color)',
+                display: 'flex', flexDirection: 'column', gap: 12
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                     <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white' }}>
+                       {match.creator_name.charAt(0)}
+                     </div>
+                     <div>
+                       <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{match.creator_name}</h4>
+                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{match.raw_data.experience_level} • {match.raw_data.engagement_rate} Engagement</span>
+                     </div>
+                  </div>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '4px 12px', borderRadius: 16, fontWeight: 700, fontSize: '0.85rem' }}>
+                    {match.score.toFixed(1)} Match
+                  </div>
+                </div>
+                
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>
+                  "{match.explanation.why_they_fit}"
+                </p>
+                {match.explanation.trade_offs !== "None." && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--accent-warning)', margin: 0 }}>
+                    ⚠️ {match.explanation.trade_offs}
+                  </p>
+                )}
+                
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  {match.raw_data.skills.map((s, idx) => (
+                    <span key={idx} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-accent)', borderRadius: 4, padding: '2px 8px', fontSize: '0.7rem', color: 'var(--text-primary)' }}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

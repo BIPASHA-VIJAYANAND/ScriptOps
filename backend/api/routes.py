@@ -11,7 +11,7 @@ from ..core.simulator import simulate_whatif
 from ..core.llm_service import generate_scene_insight, generate_overall_insight
 from ..models.schemas import (
     UploadResponse, AnalysisResponse, WhatIfRequest, WhatIfResponse,
-    ChatRequest, ChatResponse
+    ChatRequest, ChatResponse, MatchRequest, MatchResponse
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -164,3 +164,21 @@ async def chat_interaction(body: ChatRequest):
         body.selected_scene_id
     )
     return ChatResponse(response=response_text)
+
+
+# ── Talent Matching ──────────────────────────────────────────────────────────
+@router.post("/match-creators", response_model=MatchResponse)
+async def match_creators_endpoint(body: MatchRequest):
+    """
+    Score and rank creators against script requirements.
+    Uses either a provided dataset or gracefully falls back to the internal mock list for the MVP.
+    """
+    from ..core.matching import rank_creators, generate_explanations, MOCK_CREATORS
+    
+    creators_list = [c.model_dump() for c in body.creators_dataset] if body.creators_dataset else MOCK_CREATORS
+    script_reqs = body.script_requirements.model_dump()
+    
+    ranked = rank_creators(script_reqs, creators_list, top_n=5)
+    explained = generate_explanations(script_reqs, ranked)
+    
+    return MatchResponse(matches=explained)
