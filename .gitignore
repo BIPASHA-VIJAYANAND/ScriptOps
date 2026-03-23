@@ -1,0 +1,13 @@
+node_modules/
+.env
+__pycache__/
+*.txt
+script.txt
+sample_script.txt
+implementation_plan.md
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.DS_Store
