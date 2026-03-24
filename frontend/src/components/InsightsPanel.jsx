@@ -1,21 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, Clapperboard, MessageSquare, Users, RefreshCw, Send, AlertTriangle, Lightbulb, Calendar, Info, CornerDownRight } from 'lucide-react';
 
 const API = 'http://127.0.0.1:8000/api/v1';
 
 const DIFFICULTY_COLORS = {
-  Easy: '#10b981',
-  Medium: '#f59e0b',
-  Hard: '#ef4444',
-  Extreme: '#dc2626',
+  Easy: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+  Medium: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  Hard: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
+  Extreme: 'text-red-400 bg-red-400/10 border-red-400/20',
 };
 
 function DifficultyBadge({ level }) {
-  const color = DIFFICULTY_COLORS[level] || '#6366f1';
+  const colorClass = DIFFICULTY_COLORS[level] || 'text-indigo-400 bg-indigo-400/10 border-indigo-400/20';
   return (
-    <span style={{
-      display: 'inline-block', padding: '3px 12px', borderRadius: 12, fontSize: '0.75rem',
-      fontWeight: 700, background: `${color}22`, color, border: `1px solid ${color}55`, letterSpacing: '0.5px',
-    }}>
+    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${colorClass} tracking-wide uppercase shadow-sm`}>
       {level}
     </span>
   );
@@ -23,39 +22,46 @@ function DifficultyBadge({ level }) {
 
 function ShimmerRow() {
   return (
-    <div style={{
-      height: 80, borderRadius: 8,
-      background: 'linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-card-hover) 50%, var(--bg-secondary) 75%)',
-      backgroundSize: '200% 100%', animation: 'shimmer 1.4s ease-in-out infinite',
-    }} />
+    <div className="h-20 rounded-xl bg-gradient-to-r from-secondary via-white/5 to-secondary bg-[length:200%_100%] animate-pulse border border-white/5" />
   );
 }
 
 function EmptyState({ tab, selectedScene }) {
   if (tab === 'scene' && !selectedScene) {
     return (
-      <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎯</div>
-        <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No scene selected</p>
-        <p style={{ fontSize: '0.82rem' }}>Click any row in the Scene Table or a cell in the Risk Heatmap to analyse it.</p>
+      <div className="flex flex-col items-center justify-center p-12 text-slate-500 text-center">
+        <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
+          <Clapperboard size={32} strokeWidth={1.5} className="opacity-50" />
+        </div>
+        <h3 className="text-lg font-medium text-slate-300">No Target Scene</h3>
+        <p className="text-sm mt-1 max-w-xs text-slate-500">Select a scene from the tracker to view localized script breakdown.</p>
       </div>
     );
   }
   return (
-    <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
-      <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🤖</div>
-      <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No insights yet</p>
-      <p style={{ fontSize: '0.82rem' }}>Click <strong>Generate</strong> to get AI-powered production advice.</p>
+    <div className="flex flex-col items-center justify-center p-12 text-slate-500 text-center">
+      <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mb-4 text-accent">
+        <Sparkles size={32} strokeWidth={1.5} />
+      </div>
+      <h3 className="text-lg font-medium text-slate-300">No Insights Generated</h3>
+      <p className="text-sm mt-1 max-w-xs text-slate-500">Hit the Generate button to run deep intelligence over this parameter.</p>
     </div>
   );
 }
+
+const TAB_ICONS = {
+  overall: Sparkles,
+  scene: Clapperboard,
+  chat: MessageSquare,
+  crew: Users
+};
 
 export default function InsightsPanel({ analysis, selectedScene }) {
   const [tab, setTab] = useState('overall'); // 'overall', 'scene', 'chat', 'crew'
   
   // Analytics State
   const [overallData, setOverallData] = useState(null);
-  const [sceneData, setSceneData] = useState({});   // keyed by scene_number
+  const [sceneData, setSceneData] = useState({});
   const [crewData, setCrewData] = useState(null);
   const [crewLoading, setCrewLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -63,30 +69,26 @@ export default function InsightsPanel({ analysis, selectedScene }) {
 
   // Chat State
   const [chatHistory, setChatHistory] = useState([
-    { role: 'model', content: "Hello! I'm your AI Production Assistant. Ask me anything about the script's budget, risks, or logistics!" }
+    { role: 'model', content: "System Online. I am your specialized production Intelligence assistant powered by Llama 3. Ask me to break down risk vectors, summarize characters, or suggest budget cuts." }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
-  // Auto-switch to scene tab when a scene is selected
   useEffect(() => {
     if (selectedScene && selectedScene !== prevScene.current) {
-      // If we are not in chat, switch to scene tab automatically
-      if (tab !== 'chat') {
-        setTab('scene');
-      }
+      if (tab !== 'chat') setTab('scene');
       prevScene.current = selectedScene;
-      if (!sceneData[selectedScene]) {
-        fetchScene(selectedScene);
-      }
+      if (!sceneData[selectedScene]) fetchScene(selectedScene);
     }
   }, [selectedScene, tab, sceneData]);
 
-  // Auto-scroll chat to bottom
   useEffect(() => {
-    if (tab === 'chat') {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (tab === 'chat' && chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [chatHistory, tab]);
 
@@ -95,13 +97,10 @@ export default function InsightsPanel({ analysis, selectedScene }) {
     setLoading(true);
     try {
       const res = await fetch(`${API}/insights`);
-      const data = await res.json();
-      setOverallData(data);
+      setOverallData(await res.json());
     } catch (e) {
       setOverallData({ error: e.message });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const fetchScene = async (sceneNum) => {
@@ -114,44 +113,34 @@ export default function InsightsPanel({ analysis, selectedScene }) {
       setSceneData(prev => ({ ...prev, [num]: data }));
     } catch (e) {
       setSceneData(prev => ({ ...prev, [num]: { error: e.message } }));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const fetchCrew = async () => {
     setCrewLoading(true);
     try {
-      // Derive requirements from current scene or overall
-      let reqs = {
-        needs_vfx: 0, needs_stunts: 0, needs_night_shoot: 0, needs_crowd: 0,
-        complexity_level: "medium", budget_level: "medium"
-      };
-      
+      let keywords = "Cinematic, High Quality, Drama";
+      let max_budget = 10000;
+        
       const currentSceneData = selectedScene ? analysis?.scenes.find(s => s.scene_number === selectedScene) : null;
       if (currentSceneData) {
-        reqs.needs_vfx = currentSceneData.features.vfx ? 1 : 0;
-        reqs.needs_stunts = currentSceneData.features.stunt ? 1 : 0;
-        reqs.needs_night_shoot = currentSceneData.features.night ? 1 : 0;
-        reqs.needs_crowd = currentSceneData.features.crowd ? 1 : 0;
-        reqs.complexity_level = currentSceneData.risk_score > 60 ? 'high' : currentSceneData.risk_score < 30 ? 'low' : 'medium';
-        reqs.budget_level = currentSceneData.budget > 50000 ? 'high' : currentSceneData.budget < 10000 ? 'low' : 'medium';
-      } else if (analysis) {
-        reqs.complexity_level = analysis.avg_risk_score > 60 ? 'high' : 'medium';
+        const features = Object.entries(currentSceneData.features).filter(([k,v]) => v).map(([k,v]) => k).join(", ");
+        keywords = `${currentSceneData.scene_type.day_night}, ${currentSceneData.scene_type.interior ? 'Interior' : 'Exterior'}, ${features}, ${currentSceneData.heading}`;
+        
+        // Estimate a dynamic Max Daily Rate based on 10-15% of the overall scene budget parameter
+        max_budget = Math.max(2000, currentSceneData.budget * 0.15);
       }
-
-      const res = await fetch(`${API}/match-creators`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script_requirements: reqs })
+      
+      const res = await fetch(`${API}/match-creators`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ script_requirements: { keywords: keywords, max_budget_usd: max_budget } }) 
       });
+      
       const data = await res.json();
       setCrewData(data.matches || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setCrewLoading(false);
-    }
+    } catch (e) { console.error(e); } 
+    finally { setCrewLoading(false); }
   };
 
   const handleGenerate = () => {
@@ -161,10 +150,8 @@ export default function InsightsPanel({ analysis, selectedScene }) {
   };
 
   const refreshCurrent = () => {
-    if (tab === 'overall') {
-      setOverallData(null);
-      setTimeout(() => fetchOverall(), 0);
-    } else if (tab === 'scene' && selectedScene) {
+    if (tab === 'overall') { setOverallData(null); setTimeout(fetchOverall, 0); }
+    else if (tab === 'scene' && selectedScene) {
       setSceneData(prev => { const n = { ...prev }; delete n[selectedScene]; return n; });
       setTimeout(() => fetchScene(selectedScene), 0);
     }
@@ -182,19 +169,11 @@ export default function InsightsPanel({ analysis, selectedScene }) {
 
     try {
       const res = await fetch(`${API}/insights/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newHistory,
-          selected_scene_id: selectedScene || null
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newHistory, selected_scene_id: selectedScene || null })
       });
       const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.detail || data.error || "Server returned an error");
-      }
-      
+      if (!res.ok) throw new Error(data.detail || data.error || "Server error");
       setChatHistory(prev => [...prev, { role: 'model', content: data.response }]);
     } catch (err) {
       setChatHistory(prev => [...prev, { role: 'model', content: `⚠️ ${err.message}` }]);
@@ -208,290 +187,285 @@ export default function InsightsPanel({ analysis, selectedScene }) {
   const hasError = currentData?.error;
   const needsGenerate = !currentData && !loading && tab !== 'chat';
   const missingScene = tab === 'scene' && !selectedScene;
-
-  const currentScene = selectedScene
-    ? analysis?.scenes.find(s => s.scene_number === selectedScene)
-    : null;
+  const currentScene = selectedScene ? analysis?.scenes.find(s => s.scene_number === selectedScene) : null;
 
   if (!analysis) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '500px', gap: 16 }}>
+    <div className="flex flex-col h-[550px] gap-4">
 
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* Futuristic Tab Bar */}
+      <div className="flex gap-2 items-center bg-black/20 p-1.5 rounded-xl border border-white/5">
         {[
-          { id: 'overall', label: '🎬 Overall' },
-          { id: 'scene',   label: selectedScene ? `🎯 Scene ${selectedScene}` : '🎯 Scene' },
-          { id: 'chat',    label: '💬 Chat' },
-          { id: 'crew',    label: '🎭 Crew' }
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            style={{
-              flex: 1, padding: '10px 14px', borderRadius: 8, border: '1px solid',
-              borderColor: tab === id ? 'var(--accent-primary)' : 'var(--border-color)',
-              background: tab === id ? 'rgba(99,102,241,0.15)' : 'var(--bg-secondary)',
-              color: tab === id ? 'var(--accent-primary)' : 'var(--text-secondary)',
-              fontWeight: tab === id ? 700 : 500, fontSize: '0.82rem',
-              cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+          { id: 'overall', label: 'Overall' },
+          { id: 'scene',   label: selectedScene ? `Scene ${selectedScene}` : 'Local Scene' },
+          { id: 'chat',    label: 'Chat AI' },
+          { id: 'crew',    label: 'Crew Match' }
+        ].map(({ id, label }) => {
+           const Icon = TAB_ICONS[id];
+           const isActive = tab === id;
+           return (
+             <button
+               key={id}
+               onClick={() => setTab(id)}
+               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all relative
+                 ${isActive ? 'text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'}
+               `}
+             >
+               {isActive && <motion.div layoutId="activeTab" className="absolute inset-0 bg-accent rounded-lg" transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }} />}
+               <span className="relative z-10 flex items-center gap-1.5">
+                 <Icon size={14} className={isActive ? 'text-white' : 'text-slate-500'} />
+                 <span className="truncate max-w-[80px] sm:max-w-none">{label}</span>
+               </span>
+             </button>
+           );
+        })}
 
-        {/* Refresh button — only when data exists on report tabs */}
         {hasData && tab !== 'chat' && tab !== 'crew' && (
           <button
             onClick={refreshCurrent} disabled={loading} title="Re-generate insights"
-            style={{
-              padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-color)',
-              background: 'var(--bg-secondary)', color: 'var(--text-muted)',
-              cursor: 'pointer', fontSize: '0.9rem', transition: 'all 0.2s', flexShrink: 0,
-            }}
+            className="p-2 ml-1 rounded-lg border border-white/10 bg-secondary/50 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
           >
-            ↻
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         )}
       </div>
 
-      {/* Scene context strip */}
       {currentScene && (tab === 'scene' || tab === 'chat' || tab === 'crew') && (
-        <div style={{
-          padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border-accent)',
-          fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
-        }}>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{currentScene.heading}</span>
-          <span style={{ color: 'var(--text-secondary)' }}>
-            Risk <strong style={{ color: currentScene.risk_score >= 70 ? 'var(--accent-critical)' : currentScene.risk_score >= 50 ? 'var(--accent-danger)' : currentScene.risk_score >= 30 ? 'var(--accent-warning)' : 'var(--accent-success)' }}>{currentScene.risk_score}</strong>/100
-            &nbsp;·&nbsp;
-            Budget <strong style={{ color: 'var(--text-primary)' }}>${currentScene.budget.toLocaleString()}</strong>
-          </span>
-        </div>
+        <AnimatePresence>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-center flex-wrap gap-3 px-4 py-3 bg-secondary/60 rounded-xl border border-accent/20 backdrop-blur-sm">
+            <span className="font-bold text-white text-sm flex items-center gap-2"><CornerDownRight size={14} className="text-accent" /> {currentScene.heading}</span>
+            <div className="flex gap-3 text-xs font-mono font-bold bg-black/40 px-3 py-1.5 rounded-md border border-white/5">
+              <span className="text-slate-400">RISK <span className={currentScene.risk_score >= 70 ? 'text-red-400' : currentScene.risk_score >= 50 ? 'text-orange-400' : currentScene.risk_score >= 30 ? 'text-yellow-400' : 'text-green-400'}>{currentScene.risk_score}</span>/100</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">BUDGET <span className="text-white">${currentScene.budget.toLocaleString()}</span></span>
+            </div>
+          </motion.div>
+        </AnimatePresence>
       )}
 
-      {/* Content area */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-black/10 rounded-xl border border-white/5 p-4 flex flex-col relative">
 
-        {/* CHAT TAB ────────────────────────────────────────────── */}
         {tab === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '0 4px 16px 4px' }}>
+          <div className="flex flex-col h-full">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4 pb-4 pr-2">
               {chatHistory.map((msg, i) => (
-                <div key={i} style={{
-                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  backgroundColor: msg.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                  color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
-                  padding: '10px 14px', borderRadius: 12, maxWidth: '85%',
-                  borderBottomRightRadius: msg.role === 'user' ? 2 : 12,
-                  borderBottomLeftRadius: msg.role === 'model' ? 2 : 12,
-                  fontSize: '0.85rem', lineHeight: 1.5,
-                  border: msg.role === 'model' ? '1px solid var(--border-color)' : 'none'
-                }}>
-                  {msg.content}
+                <div key={i} className={`flex max-w-[85%] ${msg.role === 'user' ? 'self-end' : 'self-start'}`}>
+                   {msg.role === 'model' && (
+                     <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent mr-3 mt-1 shrink-0">
+                       <Sparkles size={14} />
+                     </div>
+                   )}
+                   <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                     msg.role === 'user' 
+                       ? 'bg-accent text-white rounded-br-sm shadow-[0_4px_15px_rgba(124,58,237,0.3)]' 
+                       : 'bg-secondary/80 border border-white/5 text-slate-200 rounded-bl-sm'
+                   }`}>
+                     {msg.content}
+                   </div>
                 </div>
               ))}
               {chatLoading && (
-                <div style={{ alignSelf: 'flex-start', backgroundColor: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 12, borderBottomLeftRadius: 2, border: '1px solid var(--border-color)' }}>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', height: 16 }}>
-                    <span className="dot-pulse" style={{ animationDelay: '0s' }}>●</span>
-                    <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>●</span>
-                    <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>●</span>
-                  </div>
+                <div className="flex max-w-[85%] self-start">
+                   <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent mr-3 mt-1 shrink-0 animate-pulse">
+                     <Sparkles size={14} />
+                   </div>
+                   <div className="px-5 py-4 rounded-2xl bg-secondary/80 border border-white/5 rounded-bl-sm flex gap-1.5 items-center">
+                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                   </div>
                 </div>
               )}
-              <div ref={chatEndRef} />
+              {/* Removed chatEndRef to prevent page hijacking via scrollIntoView */}
             </div>
 
-            <form onSubmit={handleSendChat} style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
+            <form onSubmit={handleSendChat} className="mt-auto relative">
               <input
-                type="text"
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                placeholder={selectedScene ? `Ask about Scene ${selectedScene}...` : "Ask about the script..."}
-                disabled={chatLoading}
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)',
-                  background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none'
-                }}
+                type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} disabled={chatLoading}
+                placeholder={selectedScene ? `Ask about Scene ${selectedScene}...` : "Query productions models..."}
+                className="w-full bg-secondary/90 border border-white/10 rounded-xl py-3.5 pl-4 pr-12 text-sm text-white placeholder:text-slate-500 outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all shadow-inner"
               />
               <button
-                type="submit"
-                disabled={!chatInput.trim() || chatLoading}
-                style={{
-                  padding: '0 20px', borderRadius: 8, background: 'var(--accent-primary)', color: 'white',
-                  border: 'none', fontWeight: 600, cursor: (!chatInput.trim() || chatLoading) ? 'not-allowed' : 'pointer',
-                  opacity: (!chatInput.trim() || chatLoading) ? 0.5 : 1, transition: 'all 0.2s'
-                }}
+                type="submit" disabled={!chatInput.trim() || chatLoading}
+                className={`absolute right-2 top-2 p-1.5 rounded-lg flex items-center justify-center transition-all ${
+                  (!chatInput.trim() || chatLoading) ? 'text-slate-600' : 'bg-accent text-white hover:bg-purple-500 shadow-md'
+                }`}
               >
-                Send
+                <Send size={16} className={(!chatInput.trim() || chatLoading) ? '' : 'ml-0.5'} />
               </button>
             </form>
           </div>
         )}
 
-        {/* LOADING SHIMMER */}
         {loading && tab !== 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <ShimmerRow /><ShimmerRow /><ShimmerRow />
-          </div>
+          <div className="flex flex-col gap-3 mt-2"><ShimmerRow /><ShimmerRow /><ShimmerRow /></div>
         )}
 
-        {/* EMPTY STATES */}
         {!loading && missingScene && tab !== 'chat' && tab !== 'crew' && <EmptyState tab="scene" selectedScene={null} />}
+        
         {!loading && needsGenerate && !missingScene && tab !== 'chat' && tab !== 'crew' && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '24px 0' }}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6 py-8 m-auto">
             <EmptyState tab={tab} selectedScene={selectedScene} />
-            <button className="simulate-btn" onClick={handleGenerate} style={{ width: 'auto', padding: '12px 32px', fontSize: '0.9rem' }}>
-              ✨ Generate Insights
+            <button onClick={handleGenerate} className="bg-accent hover:bg-purple-500 text-white font-bold py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(124,58,237,0.4)] flex items-center gap-2 transition-all hover:scale-105">
+              <Sparkles size={18} /> Generate Intel
             </button>
-          </div>
+          </motion.div>
         )}
 
-        {/* ERROR STATE */}
         {!loading && hasError && tab !== 'chat' && (
-          <div className="insight-item danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 flex justify-between items-center">
             <div>
-              <h4>⚠️ Error generating insights</h4>
-              <p>{currentData.error}</p>
+              <h4 className="text-red-400 font-bold mb-1 flex items-center gap-2"><AlertTriangle size={18} /> Error parsing intel</h4>
+              <p className="text-slate-400 text-sm">{currentData.error}</p>
             </div>
-            <button className="select-btn" onClick={handleGenerate}>Retry</button>
+            <button onClick={handleGenerate} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg text-sm font-bold border border-red-500/20 hover:bg-red-500/30">Retry</button>
           </div>
         )}
 
-        {/* ── OVERALL insights ─────────────────────────────────────────── */}
+        {/* OVERALL TAB */}
         {!loading && hasData && tab === 'overall' && (
-          <div className="insights-content" style={{ paddingRight: 4 }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 pb-4">
             {currentData.executive_summary && (
-              <div className="insight-item">
-                <h4>📋 Executive Summary</h4>
-                <p>{currentData.executive_summary}</p>
+              <div className="bg-secondary/60 border border-white/5 rounded-xl p-5">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2 text-sm tracking-wide"><Info size={16} className="text-blue-400" /> EXECUTIVE SUMMARY</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">{currentData.executive_summary}</p>
               </div>
             )}
             {currentData.key_concerns?.length > 0 && (
-              <div className="insight-item warning">
-                <h4>⚠️ Key Concerns</h4>
-                <ul>{currentData.key_concerns.map((c, i) => <li key={i}>{c}</li>)}</ul>
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-5">
+                <h4 className="text-orange-400 font-bold mb-3 flex items-center gap-2 text-sm tracking-wide"><AlertTriangle size={16} /> CRITICAL CONCERNS</h4>
+                <ul className="flex flex-col gap-2">
+                  {currentData.key_concerns.map((c, i) => <li key={i} className="text-slate-300 text-sm flex gap-2"><span className="text-orange-500/50 mt-0.5">•</span> <span>{c}</span></li>)}
+                </ul>
               </div>
             )}
             {currentData.recommendations?.length > 0 && (
-              <div className="insight-item success">
-                <h4>💡 Recommendations</h4>
-                <ul>{currentData.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul>
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-5">
+                <h4 className="text-green-400 font-bold mb-3 flex items-center gap-2 text-sm tracking-wide"><Lightbulb size={16} /> KEY RECOMMENDATIONS</h4>
+                <ul className="flex flex-col gap-2">
+                  {currentData.recommendations.map((r, i) => <li key={i} className="text-slate-300 text-sm flex gap-2"><span className="text-green-500/50 mt-0.5">•</span> <span>{r}</span></li>)}
+                </ul>
               </div>
             )}
             {currentData.suggested_shoot_order && (
-              <div className="insight-item">
-                <h4>📅 Shooting Order</h4>
-                <p>{currentData.suggested_shoot_order}</p>
+              <div className="bg-secondary/60 border border-white/5 rounded-xl p-5">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2 text-sm tracking-wide"><Calendar size={16} className="text-purple-400" /> MACRO SHOOT ORDER</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">{currentData.suggested_shoot_order}</p>
               </div>
             )}
             {currentData.estimated_total_shooting_days != null && (
-              <div style={{ padding: '10px 14px', background: 'rgba(99,102,241,0.08)', borderRadius: 8, fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                🎥 Estimated total shooting days: <strong style={{ color: 'var(--accent-primary)' }}>{currentData.estimated_total_shooting_days}</strong>
+              <div className="mt-2 text-center py-4 bg-accent/10 border border-accent/20 rounded-xl">
+                 <p className="text-sm font-medium text-slate-300">ESTIMATED PRINCIPAL PHOTOGRAPHY: <span className="text-xl font-bold text-accent ml-2">{currentData.estimated_total_shooting_days} DAYS</span></p>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* ── SCENE insights ────────────────────────────────────────────── */}
+        {/* SCENE TAB */}
         {!loading && hasData && tab === 'scene' && (
-          <div className="insights-content" style={{ paddingRight: 4 }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 pb-4">
             {currentData.summary && (
-              <div className="insight-item">
-                <h4>📋 Scene Summary</h4>
-                <p>{currentData.summary}</p>
+              <div className="bg-secondary/60 border border-white/5 rounded-xl p-5">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2 text-sm tracking-wide"><Info size={16} className="text-blue-400" /> SCENE DECONSTRUCTION</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">{currentData.summary}</p>
               </div>
             )}
             {currentData.top_risks?.length > 0 && (
-              <div className="insight-item danger">
-                <h4>🚨 Top Risks</h4>
-                <ul>
+              <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
+                <h4 className="text-red-400 font-bold mb-3 flex items-center gap-2 text-sm tracking-wide"><AlertTriangle size={16} /> IDENTIFIED RISKS & MITIGATION</h4>
+                <ul className="flex flex-col gap-3">
                   {currentData.top_risks.map((r, i) => (
-                    <li key={i}><strong>{r.risk}</strong> — {r.mitigation}</li>
+                    <li key={i} className="text-sm">
+                      <strong className="text-white block mb-1">{r.risk}</strong>
+                      <span className="text-slate-400 flex gap-2"><CornerDownRight size={14} className="mt-0.5 text-red-500/50 shrink-0"/> {r.mitigation}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
             {currentData.cost_optimizations?.length > 0 && (
-              <div className="insight-item success">
-                <h4>💰 Cost Optimizations</h4>
-                <ul>{currentData.cost_optimizations.map((c, i) => <li key={i}>{c}</li>)}</ul>
+              <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-5 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+                <h4 className="text-green-400 font-bold mb-3 flex items-center gap-2 text-sm tracking-wide"><Lightbulb size={16} /> BUDGET OPTIMIZATION SPONSORS</h4>
+                <ul className="flex flex-col gap-2">
+                  {currentData.cost_optimizations.map((c, i) => <li key={i} className="text-slate-300 text-sm flex gap-2"><span className="text-green-500/50 mt-0.5">•</span> <span>{c}</span></li>)}
+                </ul>
               </div>
             )}
             {currentData.difficulty && (
-              <div className="insight-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div className="bg-secondary/60 border border-white/5 rounded-xl p-5 flex justify-between items-center">
                 <div>
-                  <h4>📊 Production Difficulty</h4>
-                  <p style={{ marginTop: 6 }}>
-                    Shooting days estimate: <strong style={{ color: 'var(--text-primary)' }}>{currentData.shooting_days_estimate ?? '—'}</strong>
-                  </p>
+                  <h4 className="text-white font-bold mb-1 text-sm tracking-wide text-slate-400">PRODUCTION COMPLEXITY</h4>
+                  <p className="text-sm font-medium text-slate-300 mt-1">Setup time approx: <span className="text-white font-bold ml-1">{currentData.shooting_days_estimate ?? '1/8 days'}</span></p>
                 </div>
                 <DifficultyBadge level={currentData.difficulty} />
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* ── CREW MATCHING ────────────────────────────────────────────── */}
+        {/* CREW MATCHING */}
         {tab === 'crew' && (
-          <div className="insights-content" style={{ paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 pb-4 h-full">
             {!crewData && !crewLoading && (
-               <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
-                 <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🎭</div>
-                 <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>Find Your Crew</p>
-                 <p style={{ fontSize: '0.82rem', marginBottom: 16 }}>Match with the perfect creators based on your script's unique demands.</p>
-                 <button className="simulate-btn" onClick={fetchCrew} style={{ width: 'auto', padding: '12px 32px' }}>
-                   ✨ Find Matches
+               <div className="flex flex-col items-center justify-center p-12 text-center h-full m-auto">
+                 <div className="w-20 h-20 rounded-full bg-blue-500/20 flex items-center justify-center mb-6 text-blue-400 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+                   <Users size={36} strokeWidth={1.5} />
+                 </div>
+                 <h3 className="text-xl font-bold text-white mb-2 tracking-wide">AI Crew Radar</h3>
+                 <p className="text-sm mt-1 max-w-sm text-slate-400 leading-relaxed mb-8">Scan deterministic matrices to surface optimal talent fits for your specific logistical requirements.</p>
+                 <button onClick={fetchCrew} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center gap-2 transition-all hover:scale-105">
+                   <Sparkles size={18} /> Execute Search Match
                  </button>
                </div>
             )}
             {crewLoading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <ShimmerRow /><ShimmerRow />
-              </div>
+              <div className="flex flex-col gap-3 mt-2"><ShimmerRow /><ShimmerRow /></div>
             )}
             {crewData && crewData.map((match, i) => (
-              <div key={i} style={{
-                background: 'var(--bg-secondary)', borderRadius: 12, padding: 16, border: '1px solid var(--border-color)',
-                display: 'flex', flexDirection: 'column', gap: 12
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                     <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white' }}>
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+                key={i} className="bg-secondary/60 rounded-xl p-5 border border-white/10 relative overflow-hidden group hover:border-white/20 transition-colors"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none group-hover:bg-blue-500/10 transition-colors"></div>
+                
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-4 relative z-10">
+                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-accent flex items-center justify-center font-bold text-white text-lg shadow-md border-2 border-primary">
                        {match.creator_name.charAt(0)}
                      </div>
-                     <div>
-                       <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{match.creator_name}</h4>
-                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{match.raw_data.experience_level} • {match.raw_data.engagement_rate} Engagement</span>
+                     <div className="flex flex-col justify-center">
+                       <h4 className="text-lg leading-tight font-bold text-white tracking-wide">{match.creator_name}</h4>
+                       <span className="text-[0.70rem] mt-1 leading-none font-semibold text-slate-400 tracking-wider uppercase block">{match.raw_data.experience_level} • {match.raw_data.engagement_rate} Social</span>
                      </div>
                   </div>
-                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '4px 12px', borderRadius: 16, fontWeight: 700, fontSize: '0.85rem' }}>
-                    {match.score.toFixed(1)} Match
+                  <div className="relative z-10 bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full font-bold text-xs border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    {(match.score).toFixed(1)} / 10 Match
                   </div>
                 </div>
                 
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>
+                <p className="text-sm text-slate-300 leading-relaxed mb-4 relative z-10 border-l-2 border-white/20 pl-3 italic">
                   "{match.explanation.why_they_fit}"
                 </p>
                 {match.explanation.trade_offs !== "None." && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--accent-warning)', margin: 0 }}>
-                    ⚠️ {match.explanation.trade_offs}
-                  </p>
+                  <div className="text-xs font-medium text-amber-500 border border-amber-500/20 bg-amber-500/10 px-3 py-2 rounded-lg mb-4 flex gap-2 w-fit relative z-10">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" /> <span>{match.explanation.trade_offs}</span>
+                  </div>
                 )}
                 
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                <div className="flex flex-wrap gap-2 relative z-10">
                   {match.raw_data.skills.map((s, idx) => (
-                    <span key={idx} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-accent)', borderRadius: 4, padding: '2px 8px', fontSize: '0.7rem', color: 'var(--text-primary)' }}>
+                    <span key={idx} className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-[0.65rem] font-bold text-slate-300 uppercase tracking-wider">
                       {s}
                     </span>
                   ))}
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

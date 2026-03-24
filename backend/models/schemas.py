@@ -99,12 +99,8 @@ class Creator(BaseModel):
     price_range: str = "Medium"
 
 class ScriptRequirements(BaseModel):
-    needs_vfx: int = 0
-    needs_stunts: int = 0
-    needs_night_shoot: int = 0
-    needs_crowd: int = 0
-    complexity_level: str = "medium"
-    budget_level: str = "medium"
+    keywords: str = "Cinematic, High Quality, Drama"
+    max_budget_usd: int = 5000
 
 class MatchRequest(BaseModel):
     script_requirements: ScriptRequirements

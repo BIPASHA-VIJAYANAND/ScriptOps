@@ -1,80 +1,175 @@
 import { useState } from 'react';
-import './App.css';
-import './styles/components.css';
-import ScriptUpload from './components/ScriptUpload';
+import { motion, AnimatePresence } from 'framer-motion';
+import LandingExperience from './components/LandingExperience';
 import SummaryCards from './components/SummaryCards';
 import SceneTable from './components/SceneTable';
 import RiskHeatmap from './components/RiskHeatmap';
 import BudgetChart from './components/BudgetChart';
 import WhatIfPanel from './components/WhatIfPanel';
 import InsightsPanel from './components/InsightsPanel';
+import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
+import SettingsPanel from './components/SettingsPanel';
+import DashboardSkeleton from './components/DashboardSkeleton';
 
 function App() {
   const [analysis, setAnalysis] = useState(null);
   const [selectedScene, setSelectedScene] = useState(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const handleUploadComplete = (data) => {
-    setAnalysis(data);
-    setSelectedScene(null);
+  const handleFileDrop = async (file) => {
+    setIsAnalyzing(true);
+    // Smooth scroll to top in case they uploaded from the bottom of the landing page
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    try {
+      const form = new FormData();
+      form.append('script', file);
+      const res = await fetch(`http://localhost:8000/api/v1/upload`, { method: 'POST', body: form });
+      if (!res.ok) throw new Error('Upload failed');
+      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const analysisRes = await fetch(`http://localhost:8000/api/v1/analysis`);
+      const data = await analysisRes.json();
+      setAnalysis(data);
+      setSelectedScene(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
+  const showChrome = analysis || isAnalyzing;
+
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>🎬 Script Intelligence Dashboard</h1>
-        <p>AI-Powered Risk Analysis & Budget Estimation</p>
-      </header>
+    <div className="min-h-screen bg-primary text-slate-200 flex font-sans selection:bg-accent/30 selection:text-white overflow-hidden">
+      
+      {showChrome && (
+        <Sidebar isCollapsed={isSidebarCollapsed} onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
+      )}
+      
+      <div className={`flex-1 flex flex-col relative min-w-0 transition-all duration-300 ease-in-out ${showChrome ? (isSidebarCollapsed ? 'ml-20 w-[calc(100%-5rem)]' : 'ml-64 w-[calc(100%-16rem)]') : 'w-full ml-0'}`}>
+        
+        {showChrome && <TopBar />}
+        
+        <main className={`flex-1 w-full mx-auto relative ${showChrome ? 'p-8 max-w-[1600px]' : 'p-0 max-w-none'}`}>
+           <AnimatePresence mode="wait">
+             
+             {/* LANDING EXPERIENCE */}
+             {!analysis && !isAnalyzing && (
+               <motion.div 
+                 key="landing" 
+                 initial={{ opacity: 0 }} 
+                 animate={{ opacity: 1 }} 
+                 exit={{ opacity: 0, y: -50 }} 
+                 transition={{ duration: 0.5 }} 
+               >
+                  <LandingExperience onFileSelect={handleFileDrop} />
+               </motion.div>
+             )}
 
-      {/* Upload Section */}
-      <div className="dashboard">
-        <div className="dashboard-row full">
-          <ScriptUpload onUploadComplete={handleUploadComplete} />
-        </div>
+             {/* LOADING SKELETON STATE */}
+             {isAnalyzing && (
+               <motion.div 
+                 key="skeleton" 
+                 initial={{ opacity: 0, y: 20 }} 
+                 animate={{ opacity: 1, y: 0 }} 
+                 exit={{ opacity: 0, y: -20 }} 
+                 transition={{ duration: 0.4 }} 
+                 className="w-full mt-10"
+               >
+                  <div className="mb-8 flex flex-col gap-2">
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                       <span className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"></span> 
+                       Processing Script Intelligence...
+                    </h2>
+                    <p className="text-slate-400">Extracting scenes, tracking stunts, evaluating logistical risks.</p>
+                  </div>
+                  <DashboardSkeleton />
+               </motion.div>
+             )}
 
-        {analysis && (
-          <>
-            {/* Summary KPIs */}
-            <SummaryCards analysis={analysis} />
+             {/* DASHBOARD STATE */}
+             {analysis && !isAnalyzing && (
+               <motion.div 
+                 key="dashboard" 
+                 id="dashboard" 
+                 initial={{ opacity: 0, y: 20 }} 
+                 animate={{ opacity: 1, y: 0 }} 
+                 transition={{ duration: 0.5, delay: 0.1 }}
+                 className="flex flex-col gap-10 pb-20 mt-4"
+               >
+                  
+                  {/* High-level KPI Cards */}
+                  <div className="w-full">
+                     <SummaryCards analysis={analysis} />
+                  </div>
+                  
+                  {/* Visual Analytics */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                     <div className="glass rounded-2xl p-6 shadow-2xl shadow-black/40 ring-1 ring-white/5">
+                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                          <span className="text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]">🔥</span> 
+                          Risk Heatmap
+                        </h2>
+                        <div className="h-[350px] w-full">
+                          <RiskHeatmap scenes={analysis.scenes} selectedScene={selectedScene} onSelectScene={setSelectedScene} />
+                        </div>
+                     </div>
+                     
+                     <div className="glass rounded-2xl p-6 shadow-2xl shadow-black/40 ring-1 ring-white/5">
+                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                          <span className="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]">💰</span> 
+                          Budget by Scene
+                        </h2>
+                        <div className="h-[350px] w-full">
+                          <BudgetChart scenes={analysis.scenes} />
+                        </div>
+                     </div>
+                  </div>
 
-            {/* Heatmap + Budget Chart */}
-            <div className="dashboard-row two-col">
-              <div className="card">
-                <div className="section-title"><span className="icon">🔥</span> Risk Heatmap</div>
-                <RiskHeatmap
-                  scenes={analysis.scenes}
-                  selectedScene={selectedScene}
-                  onSelectScene={setSelectedScene}
-                />
-              </div>
-              <div className="card">
-                <div className="section-title"><span className="icon">💰</span> Budget by Scene</div>
-                <BudgetChart scenes={analysis.scenes} />
-              </div>
-            </div>
+                  {/* Granular Scene Table */}
+                  <div id="scripts" className="glass rounded-2xl p-0 overflow-hidden shadow-2xl shadow-black/40 ring-1 ring-white/5">
+                     <div className="p-6 border-b border-white/5 bg-white/[0.02]">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                          <span className="text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]">📋</span> 
+                          Detailed Shot List
+                        </h2>
+                     </div>
+                     <SceneTable scenes={analysis.scenes} selectedScene={selectedScene} onSelectScene={setSelectedScene} />
+                  </div>
 
-            {/* Scene Table */}
-            <div className="card">
-              <div className="section-title"><span className="icon">📋</span> Scene Breakdown</div>
-              <SceneTable
-                scenes={analysis.scenes}
-                selectedScene={selectedScene}
-                onSelectScene={setSelectedScene}
-              />
-            </div>
+                  {/* Interactive Engines */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                     <div className="glass rounded-2xl p-6 shadow-2xl shadow-black/40 ring-1 ring-white/5 h-fit sticky top-28">
+                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                          <span className="text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]">⚡</span> 
+                          What-If Simulator
+                        </h2>
+                        <WhatIfPanel scenes={analysis.scenes} selectedScene={selectedScene} />
+                     </div>
+                     
+                     <div id="crew" className="glass rounded-2xl p-6 shadow-2xl shadow-black/40 ring-1 ring-white/5">
+                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                          <span className="text-accent drop-shadow-[0_0_8px_rgba(124,58,237,0.8)]">🤖</span> 
+                          AI Production Intel
+                        </h2>
+                        <InsightsPanel analysis={analysis} selectedScene={selectedScene} />
+                     </div>
+                  </div>
 
-            {/* What-If + Insights */}
-            <div className="dashboard-row two-col">
-              <div className="card">
-                <div className="section-title"><span className="icon">🎯</span> What-If Simulator</div>
-                <WhatIfPanel scenes={analysis.scenes} selectedScene={selectedScene} />
-              </div>
-              <div className="card">
-                <div className="section-title"><span className="icon">🤖</span> AI Insights</div>
-                <InsightsPanel analysis={analysis} selectedScene={selectedScene} />
-              </div>
-            </div>
-          </>
-        )}
+                  {/* System Configuration */}
+                  <div id="settings" className="w-full mt-4">
+                     <SettingsPanel />
+                  </div>
+
+               </motion.div>
+             )}
+           </AnimatePresence>
+        </main>
       </div>
     </div>
   );

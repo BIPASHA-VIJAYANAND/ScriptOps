@@ -171,14 +171,26 @@ async def chat_interaction(body: ChatRequest):
 async def match_creators_endpoint(body: MatchRequest):
     """
     Score and rank creators against script requirements.
-    Uses either a provided dataset or gracefully falls back to the internal mock list for the MVP.
+    Uses HuggingFace SentenceTransformers ML over the technicians CSV dataset.
     """
-    from ..core.matching import rank_creators, generate_explanations, MOCK_CREATORS
+    from ..core.recommender import calculate_ml_matches
+    from ..models.schemas import CreatorMatch, Breakdown, Explanation
     
-    creators_list = [c.model_dump() for c in body.creators_dataset] if body.creators_dataset else MOCK_CREATORS
-    script_reqs = body.script_requirements.model_dump()
+    script_reqs = body.script_requirements
     
-    ranked = rank_creators(script_reqs, creators_list, top_n=5)
-    explained = generate_explanations(script_reqs, ranked)
+    # 1. Execute ML Model against CSV dataset
+    ml_output = calculate_ml_matches(script_reqs.keywords, script_reqs.max_budget_usd)
     
-    return MatchResponse(matches=explained)
+    # 2. Format outputs natively into Pydantic models for Frontend
+    formatted_matches = []
+    for i, m in enumerate(ml_output):
+        formatted_matches.append(CreatorMatch(
+            creator_id=f"ml_match_{i}",
+            creator_name=m["creator_name"],
+            score=m["score"],
+            breakdown=Breakdown(skill=10.0, cost=10.0, experience=10.0, engagement=10.0), # ML does this holistically
+            explanation=Explanation(**m["explanation"]),
+            raw_data=m["raw_data"]
+        ))
+        
+    return MatchResponse(matches=formatted_matches)
