@@ -2,6 +2,7 @@ node_modules/
 .env
 __pycache__/
 *.txt
+!backend/requirements.txt
 script.txt
 sample_script.txt
 implementation_plan.md
