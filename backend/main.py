@@ -27,7 +27,7 @@ app.add_middleware(
 )
 
 # Register API routes
-from .api.routes import router as api_router
+from api.routes import router as api_router
 from .api.auth import router as auth_router
 app.include_router(api_router)
 app.include_router(auth_router)
